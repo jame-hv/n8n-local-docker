@@ -1,0 +1,129 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: n8n-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_NON_ROOT_USER: ${POSTGRES_USER}
+      POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./docker/postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: n8n-redis
+    restart: always
+    volumes:
+      - ./docker/redis-data:/data
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  n8n-main:
+    image: n8nio/n8n:latest
+    container_name: n8n-main
+    restart: always
+    environment:
+      # Database
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      
+      # Redis Queue
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: 6379
+      EXECUTIONS_MODE: queue
+      
+      # n8n Configuration
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: ${N8N_PORT}
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://${N8N_HOST}:${N8N_PORT}/
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      
+      # Security
+      N8N_BASIC_AUTH_ACTIVE: true
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      
+      # Logging
+      N8N_LOG_LEVEL: info
+      
+      # File system
+      N8N_USER_FOLDER: /home/node
+    ports:
+      - "${N8N_PORT}:5678"
+    volumes:
+      - ./docker/n8n-data:/home/node/.n8n
+      - ${N8N_CUSTOM_NODES_PATH}:/home/node/.n8n/custom/node_modules/${N8N_CUSTOM_NODE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  n8n-worker:
+    image: n8nio/n8n:latest
+    container_name: n8n-worker
+    restart: always
+    environment:
+      # Database
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      
+      # Redis Queue
+      QUEUE_BULL_REDIS_HOST: redis
+      QUEUE_BULL_REDIS_PORT: 6379
+      EXECUTIONS_MODE: queue
+      EXECUTIONS_PROCESS: worker
+      
+      # n8n Configuration
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: ${N8N_PORT}
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://${N8N_HOST}:${N8N_PORT}/
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      
+      # File system
+      N8N_USER_FOLDER: /home/node
+    volumes:
+      - ./docker/n8n-data:/home/node/.n8n 
+      - ${N8N_CUSTOM_NODES_PATH}:/home/node/.n8n/custom/node_modules/${N8N_CUSTOM_NODE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  n8n-data:
+    driver: local
+
+networks:
+  default:
+    name: n8n-network

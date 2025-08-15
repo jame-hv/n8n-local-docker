@@ -1,0 +1,21 @@
+# Docker data directories
+docker/
+
+# Environment files
+.env
+
+
+# Docker logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
